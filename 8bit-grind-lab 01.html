@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>8-BIT GRIND LAB</title>
+<style>
+:root{--bg:#04100a;--fg:#4dff88;--hi:#d8ffe4;--dim:#2fb05c}
+html,body{height:100%;margin:0;background:#000}
+body{display:flex;justify-content:center}
+#crt{box-sizing:border-box;width:100%;max-width:560px;height:100%;display:flex;flex-direction:column;padding:8px 14px;background:var(--bg);color:var(--fg);
+font:min(16px,calc((100vw - 32px)/24.5))/1.35 "Courier New",Courier,monospace;text-shadow:0 0 4px rgba(77,255,136,.45);
+background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.2) 0 1px,transparent 1px 3px)}
+pre{margin:0;color:var(--hi)}
+#v{flex:1;overflow-y:auto;border-top:1px dashed var(--dim);margin-top:4px;padding-top:6px}
+#v>div{margin-bottom:.5em;white-space:pre-wrap}
+.r{display:flex;flex-wrap:wrap;gap:0 6px}
+.dim{color:var(--dim)}
+button{font:inherit;color:var(--fg);background:none;border:0;padding:3px 0;cursor:pointer;text-shadow:inherit}
+button:hover,button:focus-visible{background:var(--fg);color:var(--bg);outline:0}
+.c{width:2ch;padding:6px 0;text-align:left;color:var(--dim)}
+.c.on{color:var(--hi);font-weight:bold}
+.c.bt{text-decoration:underline}
+.c.p,.c.p.on{background:var(--fg);color:var(--bg)}
+.lb{display:inline-block;width:4ch}.lb7{display:inline-block;width:6ch}
+#foot{border-top:1px dashed var(--dim);padding-top:4px;min-height:3.8em;color:var(--hi)}
+a{color:var(--hi)}
+</style>
+</head>
+<body>
+<div id="crt">
+<pre>+--------------------------------------+
+| 8-BIT GRIND LAB  loops>sects>song>vox |
++--------------------------------------+</pre>
+<div id="tp"></div>
+<div id="tabs"></div>
+<div id="v"></div>
+<div id="foot"><div id="stat" class="dim"></div><div id="msg"></div><div id="dl"></div></div>
+</div>
+<script>
+const $=i=>document.getElementById(i);
+const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
+const row=p=>{const d=el('div','r');p.appendChild(d);return d};
+const btn=(p,l,f)=>{const b=el('button','','['+l+']');b.onclick=()=>{ensure();f()};p.appendChild(b);return b};
+const txt=(p,t,c)=>{const d=el('div',c,t);p.appendChild(d);return d};
+const say=t=>$('msg').textContent=t;
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const mk=a=>a.map(s=>[...s].map(c=>c=='.'?0:c=='x'?1:+c));
+const Z=()=>mk(Array(5).fill('................'));
+const E16=Array(8).fill(-1);
+const LN=['KCK','SNR','HAT','BAS','GTR'],LT='ABCDEFGH',SC=[0,1,3,5,7,8,10];
+const EQP={FLAT:{lo:0,mid:0,mf:1000,hi:0,hp:25,drv:1},GRIND:{lo:7,mid:-6,mf:600,hi:5,hp:35,drv:2},GAMEBOY:{lo:-6,mid:5,mf:1500,hi:-4,hp:150,drv:1},RAVE:{lo:8,mid:-2,mf:400,hi:6,hp:30,drv:1},BRUTAL:{lo:4,mid:4,mf:2500,hi:3,hp:40,drv:3}};
+const CRB=[0,7,6,4],CRN=['OFF','8-BIT','6-BIT','4-BIT'],VFX=['CLEAN','GROWL','CRUSH'];
+const KEYN='grindlab1';
+let S={loops:[
+ mk(['x.x.x.x.x.x.x.x.','.x.x.x.x.x.x.x.x','x.x.x.x.x.x.x.x.','1.1.1.1.1.1.2.3.','................']),
+ mk(['x..x..x...x.x...','........x.......','x...x...x...x...','1..1..1...2.3...','................']),
+ mk(['x...x...x...x...','....x.......x...','..x...x...x...x.','..1...1...1...1.','5.3.1.3.5.3.1.3.']),
+ mk(['x.......x.......','................','xxxxxxxxxxxxxxxx','................','1351351313513513']),
+ mk(['x.......x.x.x.x.','....x...xxxxxxxx','x.x.x.x.........','1.......1.1.1.1.','................']),Z(),Z(),Z()],
+ sects:[[3,3,2,2,-1,-1,-1,-1],[0,0,0,1,-1,-1,-1,-1],[1,1,0,4,-1,-1,-1,-1],[...E16],[...E16],[...E16]],
+ song:[0,1,2,1,-1,-1,-1,-1,-1,-1,-1,-1],bpm:160,key:0,eq:{name:'GRIND',...EQP.GRIND},cr:1,vfx:0,vlev:1,voff:0,voxOn:true,vol:[5,5,5,5,5]};
+const blankS=()=>({loops:Array.from({length:8},Z),sects:Array.from({length:6},()=>[...E16]),song:Array(12).fill(-1),bpm:160,key:0,eq:{name:'GRIND',...EQP.GRIND},cr:1,vfx:0,vlev:1,voff:0,voxOn:true,vol:[5,5,5,5,5]});
+const DEMO=JSON.stringify(S);
+try{const d=JSON.parse(localStorage.getItem(KEYN));if(d)Object.assign(S,d)}catch(e){}
+const save=()=>{try{localStorage.setItem(KEYN,JSON.stringify(S))}catch(e){}};
+
+let tab='LOOPS',cur=0,sec=0,cells=[],ctx,bus,drv,cru,hp,lo,md,hi,comp,mast,rd,vin,vsh,nb,pw,
+ seq=[],i=0,b=0,nt=0,st0=0,tm,gen=0,playing=false,loopy=false,opt={},q=[],rafOn=false,prev=[],
+ ms,an,mr,xr,vbuf,vsrc,recLead=0,cp=false,gin,ib,cd,bl,cc=false;
+const cl=x=>JSON.parse(JSON.stringify(x));
+const emptyL=l=>l.every(a=>a.every(x=>!x)),emptyS=s=>s.every(x=>x<0);
+
+/* ---------- audio ---------- */
+const bq=(t,f)=>{const n=ctx.createBiquadFilter();n.type=t;n.frequency.value=f;return n};
+const chain=(...n)=>n.reduce((a,c)=>(a.connect(c),c));
+const mkc=f=>{const c=new Float32Array(2048);for(let k=0;k<2048;k++)c[k]=f(k/1023.5-1);return c};
+function init(){
+ ctx=new(window.AudioContext||window.webkitAudioContext)();
+ bus=ctx.createGain();drv=ctx.createWaveShaper();cru=ctx.createWaveShaper();
+ hp=bq('highpass',30);lo=bq('lowshelf',120);md=bq('peaking',1000);hi=bq('highshelf',6000);
+ comp=ctx.createDynamicsCompressor();comp.threshold.value=-14;comp.ratio.value=6;
+ mast=ctx.createGain();mast.gain.value=.8;rd=ctx.createMediaStreamDestination();
+ chain(bus,drv,cru,hp,lo,md,hi,comp,mast);mast.connect(ctx.destination);mast.connect(rd);
+ vin=ctx.createGain();vsh=ctx.createWaveShaper();
+ const vp=bq('peaking',3000);vp.gain.value=4;
+ chain(vin,vsh,bq('highpass',120),vp,ctx.createDynamicsCompressor()).connect(mast);
+ nb=ctx.createBuffer(1,ctx.sampleRate,ctx.sampleRate);const d=nb.getChannelData(0);let z=0;
+ for(let k=0;k<d.length;k++){if(k%5==0)z=Math.random()*2-1;d[k]=z}
+ const re=new Float32Array(64),im=new Float32Array(64);
+ for(let n=1;n<64;n++)re[n]=2/(n*Math.PI)*Math.sin(n*Math.PI*.125);
+ pw=ctx.createPeriodicWave(re,im);
+ ib=[0,1,2,3,4].map(()=>{const n=ctx.createGain();n.connect(bus);return n});cd=ib[0];
+ gin=ctx.createGain();const gs=ctx.createWaveShaper(),gp=bq('peaking',750),gout=ctx.createGain();
+ gs.curve=mkc(x=>Math.tanh(25*x));gp.gain.value=5;gout.gain.value=.3;
+ chain(gin,gs,bq('highpass',80),gp,bq('lowpass',3800),gout).connect(ib[4]);
+ applyEQ();applyVox();applyVol();
+}
+function ensure(){if(!ctx)init();if(ctx.state=='suspended')ctx.resume()}
+function applyEQ(){
+ if(!ctx)return;const e=S.eq,t=ctx.currentTime;
+ hp.frequency.setTargetAtTime(e.hp,t,.02);lo.gain.setTargetAtTime(e.lo,t,.02);
+ md.frequency.value=e.mf;md.gain.setTargetAtTime(e.mid,t,.02);hi.gain.setTargetAtTime(e.hi,t,.02);
+ const k=1+e.drv*2;drv.curve=mkc(x=>Math.tanh(k*x)/Math.tanh(k));
+ const bits=CRB[S.cr];cru.curve=bits?mkc(x=>{const L=2**(bits-1);return Math.round(x*L)/L}):null;
+}
+function applyVol(){if(!ctx)return;ib.forEach((n,k)=>n.gain.setTargetAtTime(S.vol[k]/5,ctx.currentTime,.02))}
+function applyVox(){
+ if(!ctx)return;vin.gain.value=S.vlev;
+ vsh.curve=S.vfx==1?mkc(x=>Math.tanh(10*x)):S.vfx==2?mkc(x=>Math.round(x*8)/8):null;
+}
+const env=(g,t,v,d)=>{g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+d)};
+function osc(t,type,f0,f1,d,v){const o=ctx.createOscillator(),g=ctx.createGain();o.type=type;o.frequency.setValueAtTime(f0,t);if(f1)o.frequency.exponentialRampToValueAtTime(f1,t+d*.7);env(g,t,v,d);o.connect(g);g.connect(cd);o.start(t);o.stop(t+d+.02)}
+function nz(t,d,v,ft,f){const s=ctx.createBufferSource(),fl=bq(ft,f),g=ctx.createGain();s.buffer=nb;env(g,t,v,d);s.connect(fl);fl.connect(g);g.connect(cd);s.start(t);s.stop(t+d)}
+function tone(t,base,deg,d,v,w){const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.value=440*2**((base+S.key+SC[deg-1]-69)/12);if(w)o.setPeriodicWave(w);else o.type='square';env(g,t,v,d);o.connect(g);g.connect(cd);o.start(t);o.stop(t+d)}
+function guitar(t,deg,d){
+ const f=440*2**((40+S.key+SC[deg-1]-69)/12),g=ctx.createGain();
+ g.gain.setValueAtTime(.35,t);g.gain.exponentialRampToValueAtTime(.2,t+d*.5);g.gain.exponentialRampToValueAtTime(.001,t+d);
+ g.connect(gin);
+ [[f,0],[f,9],[f*1.4983,-5],[f/2,4]].forEach(([fr,c])=>{const o=ctx.createOscillator();o.type='sawtooth';o.frequency.value=fr;o.detune.value=c;o.connect(g);o.start(t);o.stop(t+d)});
+}
+function stepAt(lp,k,t){
+ const d=15/S.bpm;
+ if(lp[0][k]){cd=ib[0];osc(t,'sine',170,40,.16,1)}
+ if(lp[1][k]){cd=ib[1];nz(t,.12,.6,'bandpass',1800);osc(t,'square',190,120,.06,.25)}
+ if(lp[2][k]){cd=ib[2];nz(t,.04,.3,'highpass',7000)}
+ if(lp[3][k]){cd=ib[3];tone(t,28,lp[3][k],d*1.8,.5)}
+ if(lp[4][k])guitar(t,lp[4][k],d*1.7);
+}
+function prevw(l,x){const lp=[[],[],[],[],[]];lp[l][0]=x;stepAt(lp,0,ctx.currentTime+.01)}
+
+/* ---------- sequencer ---------- */
+function build(m){
+ const T=a=>{a=[...a];while(a.length&&a[a.length-1]<0)a.pop();return a};
+ return m=='loop'?[cur]:m=='sect'?T(S.sects[sec]):S.song.flatMap(s=>s<0?[]:T(S.sects[s]));
+}
+function go(mode,o={}){
+ ensure();stop();seq=build(mode);
+ if(!seq.length)return say('Nothing to play yet. Add loops to the bars first.');
+ loopy=mode!='song';opt=o;i=0;b=0;st0=nt=ctx.currentTime+.15;q=[];playing=true;
+ tm=setInterval(sched,25);
+ if(mode=='song'&&vbuf&&S.voxOn&&!o.rec)playVox(st0);
+ if(!rafOn){rafOn=true;raf()}
+ say(mode=='song'?'Playing song...':'Playing '+mode+' (loops until STOP)...');
+}
+function sched(){
+ const d=15/S.bpm;
+ while(playing&&nt<ctx.currentTime+.15){
+  const li=seq[b];if(li>=0)stepAt(S.loops[li],i,nt);
+  q.push({t:nt,i,b,li});nt+=d;
+  if(++i==16){i=0;if(++b>=seq.length){
+   if(loopy)b=0;
+   else{playing=false;clearInterval(tm);const g=gen,e=opt.onEnd;
+    setTimeout(()=>{if(g==gen){stop();e&&e()}},(nt-ctx.currentTime)*1000+900);return}}}
+ }
+}
+function stop(){
+ gen++;playing=false;clearInterval(tm);
+ if(vsrc){try{vsrc.stop()}catch(e){}vsrc=null}
+ [mr,xr].forEach(m=>{if(m&&m.state=='recording')m.stop()});
+ opt={};q=[];hl(null);say('');
+}
+function raf(){
+ if(!playing&&!q.length){rafOn=false;return}
+ while(q.length&&q[0].t<=ctx.currentTime)hl(q.shift());
+ requestAnimationFrame(raf);
+}
+function hl(e){
+ prev.forEach(c=>c.classList.remove('p'));prev=[];
+ if(!e){$('stat').textContent='';return}
+ $('stat').textContent='BAR '+(e.b+1)+'/'+seq.length+'  LOOP '+(e.li>=0?LT[e.li]:'-');
+ if(tab=='LOOPS'&&e.li==cur&&cells.length)for(let l=0;l<5;l++){const c=cells[l][e.i];c.classList.add('p');prev.push(c)}
+}
+
+/* ---------- vocals ---------- */
+function playVox(t0){
+ const s=ctx.createBufferSource(),w=t0-recLead+S.voff/1000,n=ctx.currentTime;
+ s.buffer=vbuf;s.connect(vin);
+ if(w<n)s.start(n,Math.min(n-w,vbuf.duration-.001));else s.start(w);
+ vsrc=s;
+}
+async function arm(){
+ try{
+  ms=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+  an=ctx.createAnalyser();an.fftSize=256;ctx.createMediaStreamSource(ms).connect(an);
+  say('MIC ARMED. Put headphones on, then press REC.');draw();
+ }catch(e){say('MIC ERROR: '+e.message+'. Allow microphone access, or open this file in Chrome, Edge, Firefox or Safari.')}
+}
+function rec(){
+ if(!ms)return say('Press ARM MIC first.');
+ go('song',{rec:true});if(!playing)return;
+ const ch=[];mr=new MediaRecorder(ms);
+ mr.ondataavailable=e=>e.data.size&&ch.push(e.data);
+ recLead=st0-ctx.currentTime;
+ mr.onstop=async()=>{
+  try{vbuf=await ctx.decodeAudioData(await new Blob(ch,{type:ch[0].type}).arrayBuffer());say('VOX RECORDED: '+vbuf.duration.toFixed(1)+'s. Press PLAY MIX. Use OFFSET if it sounds late or early.');draw()}
+  catch(e){say('Could not read the recording: '+e.message)}
+ };
+ mr.start();say('RECORDING... perform over the song!');
+}
+function link(blob,ext){
+ const a=el('a','',' >> DOWNLOAD '+ext.toUpperCase()+' <<');
+ a.href=URL.createObjectURL(blob);a.download='grind-song.'+ext;
+ $('dl').innerHTML='';$('dl').appendChild(a);
+}
+function loadLame(){
+ if(window.lamejs)return Promise.resolve();
+ const u=['https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js','https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js'];
+ return new Promise((ok,no)=>{
+  const t=k=>{
+   if(k>=u.length)return no(Error('encoder not available'));
+   const e=document.createElement('script');e.src=u[k];
+   e.onload=()=>window.lamejs?ok():t(k+1);e.onerror=()=>t(k+1);document.head.appendChild(e);
+  };t(0);
+ });
+}
+async function mp3(ab){
+ const n=Math.min(2,ab.numberOfChannels),enc=new lamejs.Mp3Encoder(n,ab.sampleRate,192),out=[];
+ const cv=a=>{const o=new Int16Array(a.length);for(let k=0;k<a.length;k++){const x=Math.max(-1,Math.min(1,a[k]));o[k]=x<0?x*32768:x*32767}return o};
+ const L=cv(ab.getChannelData(0)),R=n>1?cv(ab.getChannelData(1)):null;
+ for(let k=0;k<L.length;k+=1152){
+  const d=R?enc.encodeBuffer(L.subarray(k,k+1152),R.subarray(k,k+1152)):enc.encodeBuffer(L.subarray(k,k+1152));
+  if(d.length)out.push(d);
+  if(k%(1152*300)==0)await new Promise(r=>setTimeout(r));
+ }
+ const e=enc.flush();if(e.length)out.push(e);
+ return new Blob(out,{type:'audio/mpeg'});
+}
+function exp(){
+ go('song');if(!playing)return;
+ const ch=[];xr=new MediaRecorder(rd.stream);
+ xr.ondataavailable=e=>e.data.size&&ch.push(e.data);
+ xr.onstop=async()=>{
+  const m=xr.mimeType,raw=new Blob(ch,{type:m});
+  try{
+   say('Encoding MP3, please wait...');await loadLame();
+   const ab=await ctx.decodeAudioData(await raw.arrayBuffer());
+   link(await mp3(ab),'mp3');say('MP3 ready. Press the download link.');
+  }catch(e){
+   link(raw,m.includes('ogg')?'ogg':m.includes('mp4')?'m4a':'webm');
+   say('MP3 failed ('+e.message+'). The MP3 encoder loads from the internet, so check your connection. Offering the browser format instead.');
+  }
+ };
+ xr.start();say('EXPORTING in real time. Wait for the song to end...');
+}
+setInterval(()=>{
+ const m=$('mic');if(!m||!an)return;
+ const a=new Uint8Array(an.fftSize);an.getByteTimeDomainData(a);
+ let p=0;a.forEach(x=>p=Math.max(p,Math.abs(x-128)));
+ const n=Math.min(10,Math.round(p/128*20));m.textContent='MIC  ['+'#'.repeat(n)+'-'.repeat(10-n)+']';
+},100);
+
+/* ---------- UI ---------- */
+const mt=(x,a,c)=>'['+'#'.repeat(Math.round((x-a)/(c-a)*10)).padEnd(10,'-')+']';
+function adj(v,lb,disp,f){const r=row(v);r.appendChild(el('span','lb7',lb));btn(r,'-',()=>f(-1));btn(r,'+',()=>f(1));r.appendChild(el('span','',' '+disp))}
+function sel(r,n,f,on){for(let k=0;k<n;k++)btn(r,k==on?'*'+f(k)+'*':f(k),()=>{});}
+const V={};
+V.LOOPS=v=>{
+ let r=row(v);LT.split('').forEach((c,k)=>btn(r,k==cur&&!cp?'*'+c+'*':c,()=>{if(cp){S.loops[k]=cl(S.loops[cur]);say('Loop '+LT[cur]+' copied onto loop '+LT[k]+'. Now editing '+LT[k]+'.');cp=false;cur=k;save()}else cur=k;draw()}));
+ if(cp)txt(v,'COPY MODE: tap the loop letter to copy '+LT[cur]+' onto (overwrites it).','g');
+ txt(v,'    1       2       3       4','dim');
+ const lp=S.loops[cur],sym=(l,x)=>x?(l<3?'x':String(x)):'.';
+ LN.forEach((n,l)=>{
+  const d=el('div');d.appendChild(el('span','lb',n));cells[l]=[];
+  for(let k=0;k<16;k++){
+   const c=el('button','c'+(k%4?'':' bt')+(lp[l][k]?' on':''),sym(l,lp[l][k]));
+   c.onclick=()=>{ensure();lp[l][k]=(lp[l][k]+1)%(l<3?2:8);c.textContent=sym(l,lp[l][k]);c.classList.toggle('on',!!lp[l][k]);if(lp[l][k])prevw(l,lp[l][k]);save()};
+   d.appendChild(c);cells[l].push(c);
+  }
+  v.appendChild(d);
+ });
+ r=row(v);
+ btn(r,'RANDOM',()=>{const P=[.5,.35,.5,.45,.3];lp.forEach((a,l)=>{for(let k=0;k<16;k++)a[k]=Math.random()<P[l]*(l<3&&k%2?.6:1)?(l<3?1:1+(Math.random()*5|0)):0});save();draw()});
+ btn(r,'CLEAR',()=>{lp.forEach(a=>a.fill(0));save();draw()});
+ btn(r,'KEY -',()=>{S.key=(S.key+11)%12;save();draw()});btn(r,'KEY +',()=>{S.key=(S.key+1)%12;save();draw()});
+ r=row(v);
+ btn(r,'DUPLICATE',()=>{const k=S.loops.findIndex(emptyL);if(k<0)return say('No empty loop slot left. Use COPY TO to overwrite one.');S.loops[k]=cl(lp);cur=k;save();say('Loop '+LT[cur]+' is a copy. Edit away!');draw()});
+ btn(r,'COPY TO',()=>{cp=!cp;say(cp?'Pick the target loop letter.':'Copy cancelled.');draw()});
+ txt(v,'KCK/SNR/HAT: tap on/off. BAS/GTR: tap to cycle notes 1-7 (phrygian). GTR plays power chords. KEY +'+S.key+'.','dim');
+ txt(v,'Loops are 1 bar of 16 steps. Build sections in SECTIONS.','dim');
+};
+function slots(v,arr,n,lab,max,onSel){
+ for(let h=0;h<n;h+=4){const r=row(v);for(let k=h;k<h+4;k++)btn(r,(k+1)+':'+(arr[k]<0?'-':lab(arr[k])),()=>{arr[k]++;if(arr[k]>max)arr[k]=-1;save();draw()})}
+}
+V.SECTIONS=v=>{
+ let r=row(v);for(let k=0;k<6;k++)btn(r,k==sec&&!cp?'*S'+(k+1)+'*':'S'+(k+1),()=>{if(cp){S.sects[k]=[...S.sects[sec]];say('Section S'+(sec+1)+' copied onto S'+(k+1)+'. Now editing S'+(k+1)+'.');cp=false;sec=k;save()}else sec=k;draw()});
+ if(cp)txt(v,'COPY MODE: tap the section to copy S'+(sec+1)+' onto (overwrites it).','g');
+ txt(v,'SECTION S'+(sec+1)+': each slot is one bar. Tap to pick a loop (A-H).','dim');
+ slots(v,S.sects[sec],8,x=>LT[x],7);
+ r=row(v);btn(r,'PLAY SECT',()=>go('sect'));btn(r,'CLEAR',()=>{S.sects[sec].fill(-1);save();draw()});
+ btn(r,'DUPLICATE',()=>{const k=S.sects.findIndex(emptyS);if(k<0)return say('No empty section left. Use COPY TO to overwrite one.');S.sects[k]=[...S.sects[sec]];sec=k;save();say('Section S'+(k+1)+' is a copy. Edit away!');draw()});
+ btn(r,'COPY TO',()=>{cp=!cp;say(cp?'Pick the target section.':'Copy cancelled.');draw()});
+ txt(v,'Trailing empty slots are ignored. Empty slots between loops play as a silent bar.','dim');
+};
+V.SONG=v=>{
+ txt(v,'SONG: each slot plays a whole section (S1-S6). Tap to pick.','dim');
+ slots(v,S.song,12,x=>'S'+(x+1),5);
+ const n=build('song').length,s=Math.round(n*240/S.bpm);
+ txt(v,'LENGTH: '+n+' bars = '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0'));
+ const r=row(v);btn(r,'PLAY SONG',()=>go('song'));btn(r,'CLEAR',()=>{S.song.fill(-1);save();draw()});
+};
+V.MIX=v=>{
+ txt(v,'EQ PRESET: '+S.eq.name);
+ const r=row(v);Object.keys(EQP).forEach(k=>btn(r,S.eq.name==k?'*'+k+'*':k,()=>{S.eq={name:k,...EQP[k]};applyEQ();save();draw()}));
+ [['LOW','lo',-12,12],['MID','mid',-12,12],['HIGH','hi',-12,12],['DRIVE','drv',0,4]].forEach(([n,k,a,c])=>
+  adj(v,n,mt(S.eq[k],a,c)+' '+S.eq[k],d=>{S.eq[k]=clamp(S.eq[k]+d,a,c);S.eq.name='CUSTOM';applyEQ();save();draw()}));
+ const r2=row(v);btn(r2,'CRUSH: '+CRN[S.cr],()=>{S.cr=(S.cr+1)%4;applyEQ();save();draw()});
+ txt(v,'DRIVE = distortion. CRUSH = bit reduction for chip-tune crunch. Changes apply live while playing.','dim');
+ txt(v,'INSTRUMENT VOLUMES (5 = normal, 0 = mute)');
+ ['KICK','SNARE','HAT','BASS','GUITAR'].forEach((n,k)=>adj(v,n,mt(S.vol[k],0,10)+' '+S.vol[k],d=>{S.vol[k]=clamp(S.vol[k]+d,0,10);applyVol();save();draw()}));
+ const r3=row(v);btn(r3,'PLAY SONG',()=>go('song'));
+};
+V.VOX=v=>{
+ txt(v,'USE HEADPHONES when recording or the mic hears the song.','dim');
+ txt(v,'MIC: '+(ms?'ARMED':'OFF')+'  VOX: '+(vbuf?vbuf.duration.toFixed(1)+'s':'NONE')+'  '+(S.voxOn?'ON':'MUTED'));
+ txt(v,'MIC  [----------]').id='mic';
+ let r=row(v);btn(r,'ARM MIC',arm);btn(r,'REC',rec);btn(r,'STOP',stop);
+ r=row(v);btn(r,'PLAY MIX',()=>go('song'));btn(r,'VOX '+(S.voxOn?'ON':'OFF'),()=>{S.voxOn=!S.voxOn;save();draw()});btn(r,'CLEAR VOX',()=>{vbuf=null;draw()});
+ txt(v,'VOX SOUND');r=row(v);VFX.forEach((n,k)=>btn(r,S.vfx==k?'*'+n+'*':n,()=>{S.vfx=k;applyVox();save();draw()}));
+ adj(v,'LEVEL',mt(S.vlev,0,2)+' '+S.vlev.toFixed(1),d=>{S.vlev=clamp(Math.round((S.vlev+d*.1)*10)/10,0,2);applyVox();save();draw()});
+ adj(v,'OFFSET',(S.voff>0?'+':'')+S.voff+' ms',d=>{S.voff=clamp(S.voff+d*10,-300,300);save();draw()});
+ r=row(v);btn(r,'EXPORT MIX',exp);
+ txt(v,'EXPORT MIX records the song and vocals in real time, then saves an MP3.','dim');
+};
+const okP=p=>p&&Array.isArray(p.loops)&&p.loops.length==8&&p.loops.every(l=>Array.isArray(l)&&l.length==5&&l.every(a=>Array.isArray(a)&&a.length==16))&&Array.isArray(p.sects)&&p.sects.length==6&&p.sects.every(a=>Array.isArray(a)&&a.length==8)&&Array.isArray(p.song)&&p.song.length==12;
+function fresh(){
+ cur=0;sec=0;cc=false;S.bpm=clamp(+S.bpm||160,80,300);S.key=((+S.key||0)%12+12)%12;
+ if(!Array.isArray(S.vol)||S.vol.length!=5)S.vol=[5,5,5,5,5];
+ if(!S.eq||typeof S.eq.lo!='number')S.eq={name:'GRIND',...EQP.GRIND};
+ applyEQ();applyVox();applyVol();if(bl)bl.textContent=S.bpm+' BPM';save();draw();
+}
+function dlProj(){
+ const a=el('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({app:'8bit-grind-lab',version:1,project:S},null,1)],{type:'application/json'}));
+ a.download='grind-project.json';document.body.appendChild(a);a.click();a.remove();
+ say('Saved grind-project.json. Use LOAD FILE to open it later.');
+}
+function upProj(){
+ const f=el('input');f.type='file';f.accept='.json,application/json';
+ f.onchange=async()=>{
+  const x=f.files[0];if(!x)return;
+  try{const d=JSON.parse(await x.text()),p=d.project||d;if(!okP(p))throw Error('this is not a Grind Lab project file');
+   stop();S=Object.assign(blankS(),p);fresh();say('Project loaded: '+x.name)}
+  catch(e){say('Could not load file: '+e.message)}
+ };
+ f.click();
+}
+V.FILE=v=>{
+ txt(v,'PROJECT FILE holds your loops, sections, song, tempo, key, volumes and EQ. It also auto-saves in this browser.','dim');
+ let r=row(v);btn(r,'SAVE FILE',dlProj);btn(r,'LOAD FILE',upProj);
+ txt(v,'Vocal takes are not stored in the file. Use EXPORT MIX in VOX to keep a recording.','dim');
+ r=row(v);btn(r,'LOAD DEMO',()=>{stop();S=JSON.parse(DEMO);fresh();say('Demo project loaded.')});
+ r=row(v);
+ if(cc){btn(r,'YES, ERASE EVERYTHING',()=>{stop();S=blankS();vbuf=null;fresh();say('Project cleared. Blank slate!')});btn(r,'CANCEL',()=>{cc=false;draw()});txt(v,'This wipes all loops, sections, the song and the vocal take. Save a file first if unsure.','g')}
+ else btn(r,'CLEAR ALL',()=>{cc=true;draw()});
+};
+function tabs(){
+ const t=$('tabs');t.innerHTML='';const r=row(t);
+ Object.keys(V).forEach(k=>btn(r,k==tab?'*'+k+'*':k,()=>{tab=k;cp=false;cc=false;draw();$('v').scrollTop=0}));
+}
+function draw(){const v=$('v'),y=v.scrollTop;v.innerHTML='';cells=[];V[tab](v);tabs();v.scrollTop=y}
+
+/* ---------- transport ---------- */
+(()=>{
+ const t=$('tp'),r1=row(t),r2=row(t);
+ btn(r1,'PLAY LOOP',()=>go('loop'));btn(r1,'PLAY SECT',()=>go('sect'));btn(r1,'PLAY SONG',()=>go('song'));btn(r1,'STOP',stop);
+ r2.appendChild(el('span','','TEMPO '));
+ bl=el('span','',S.bpm+' BPM');const bp=d=>{S.bpm=clamp(S.bpm+d,80,300);bl.textContent=S.bpm+' BPM';save()};
+ btn(r2,'-',()=>bp(-5));btn(r2,'+',()=>bp(5));r2.appendChild(bl);
+})();
+draw();
+say('Tap cells to program a loop, then press PLAY LOOP. A demo song is preloaded: try PLAY SONG.');
+</script>
+</body>
+</html>
